@@ -25,7 +25,7 @@ let connectionQueue = [];
 let currentConnectingCount = 0;
 const MAX_CONCURRENT_CONNECTS = 5;
 
-// دالة التحقق من الاشتراك الإجباري بالأزرار
+// دالة التحقق من الاشتراك الإجباري
 async function checkSubscription(msg) {
     const userId = msg.from.id;
     if (userId === ADMIN_ID) return true; 
@@ -62,7 +62,6 @@ bot.on('callback_query', async (query) => {
             if (['member', 'administrator', 'creator'].includes(member.status)) {
                 await bot.answerCallbackQuery(query.id, { text: "✅ تم التحقق، يمكنك استخدام البوت الآن!", show_alert: true });
                 await bot.deleteMessage(query.message.chat.id, query.message.message_id);
-                // إرسال قائمة البداية بعد التحقق
                 sendWelcomeMessage(query.message.chat.id, query.from.first_name, userId);
             } else {
                 await bot.answerCallbackQuery(query.id, { text: "❌ مازلت غير مشترك في القناة!", show_alert: true });
@@ -100,10 +99,8 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    // بقية الأوامر تتطلب اشتراكاً
     if (!(await checkSubscription(msg))) return;
 
-    // أمر الربط الذكي
     if (text.startsWith('/connect')) {
         let phoneNumber = text.replace('/connect', '').trim().replace(/\D/g, '');
         if (!phoneNumber || phoneNumber.length < 10) {
@@ -121,7 +118,6 @@ bot.on('message', async (msg) => {
         processQueue();
     }
 
-    // أمر حذف الجلسة
     if (text.startsWith('/deletesession')) {
         let phoneNumber = text.replace('/deletesession', '').trim().replace(/\D/g, '');
         if (!phoneNumber) return bot.sendMessage(chatId, "⚠️ *توضيح: اكتب الرقم بعد الأمر لحذفه مثال*\n`/deletesession 967xxxxxxxxx`", { parse_mode: "Markdown" });
@@ -136,7 +132,6 @@ bot.on('message', async (msg) => {
         }
     }
 
-    // أوامر المالك (الأسطورة فقط)
     if (userId === ADMIN_ID) {
         if (text === '/list') {
             const sessionsDir = path.join(__dirname, 'sessions');
@@ -155,7 +150,7 @@ bot.on('message', async (msg) => {
     }
 });
 
-// محرك المعالجة
+// محرك المعالجة (تم التعديل لربط package.json)
 async function processQueue() {
     if (currentConnectingCount >= MAX_CONCURRENT_CONNECTS || connectionQueue.length === 0) return;
     currentConnectingCount++;
@@ -163,9 +158,20 @@ async function processQueue() {
     const userSessionPath = path.join(__dirname, 'sessions', phoneNumber);
     if (!fs.existsSync(userSessionPath)) fs.mkdirSync(userSessionPath, { recursive: true });
 
-    ['Access', 'System', 'node_modules', 'sound', 'database', 'src', 'lib'].forEach(folder => {
-        const source = path.join(__dirname, folder);
-        if (fs.existsSync(source)) try { execSync(`ln -s ${source} ${path.join(userSessionPath, folder)}`); } catch (e) {}
+    // مصفوفة العناصر المطلوب ربطها - تمت إضافة package.json هنا لإنهاء الخطأ
+    const itemsToLink = ['Access', 'System', 'node_modules', 'sound', 'database', 'src', 'lib', 'package.json'];
+
+    itemsToLink.forEach(item => {
+        const source = path.join(__dirname, item);
+        const destination = path.join(userSessionPath, item);
+        if (fs.existsSync(source)) {
+            try { 
+                // نستخدم -sf للتأكد من استبدال الروابط القديمة إن وجدت
+                execSync(`ln -sf "${source}" "${destination}"`); 
+            } catch (e) {
+                console.error(`Link error for ${item}:`, e.message);
+            }
+        }
     });
 
     const child = spawn('node', [path.join(__dirname, 'connect.js')], { cwd: userSessionPath, stdio: ['pipe', 'pipe', 'pipe'] });
